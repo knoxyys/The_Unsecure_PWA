@@ -4,6 +4,8 @@ from flask import request
 from flask import redirect
 from flask_cors import CORS
 import user_management as dbHandler
+import security as sec
+import data_handler_clone as sanitizer
 
 # Code snippet for logging a message
 # app.logger.critical("message")
@@ -34,10 +36,23 @@ def signup():
         url = request.args.get("url", "")
         return redirect(url, code=302)
     if request.method == "POST":
-        username = request.form["username"]
+        username = sanitizer.make_web_safe(request.form["username"])
         password = request.form["password"]
         DoB = request.form["dob"]
-        dbHandler.insertUser(username, password, DoB)
+
+        try:
+            sanitizer.check_password(password)
+        except ValueError as error:
+            print(error)
+            return False
+        except TypeError as error:
+            print(error)  # doesn't explicitly tell the user but they'll live
+            return False  # didnt actually need to do this but this is cool now ig
+
+        salt = sec.get_salt()  # generates salt
+        password = sec.hashstr(password, salt)  # encrypts password
+
+        dbHandler.insertUser(username, password, DoB, salt)
         return render_template("/index.html")
     else:
         return render_template("/signup.html")
@@ -57,6 +72,7 @@ def home():
     elif request.method == "POST":
         username = request.form["username"]
         password = request.form["password"]
+
         isLoggedIn = dbHandler.retrieveUsers(username, password)
         if isLoggedIn:
             dbHandler.listFeedback()
